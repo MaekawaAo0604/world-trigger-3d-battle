@@ -53,45 +53,20 @@ export class ProjectileManager {
    */
   createProjectileEntity(
     shooter: Entity,
-    shooterTransform: Transform,
+    position: THREE.Vector3,
+    direction: THREE.Vector3,
     triggerType: TriggerType,
-    character: Character,
-    isLeftHand: boolean
+    character: Character
   ): Entity {
     const projectileEntity = this.world.createEntity();
     const definition = TRIGGER_DEFINITIONS[triggerType];
     
-    // カメラからキャラクター位置への射撃方向を計算
-    const renderSys = this.world.getSystem(RenderSystem);
-    const camera = renderSys?.getCamera();
-    
-    let direction = new THREE.Vector3(0, 0, -1);
-    
-    if (camera) {
-      // レイキャスティングで画面中央の方向を取得
-      const raycaster = new THREE.Raycaster();
-      raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
-      
-      // レイキャスターの原点から非常に遠い点を計算（精度向上）
-      const rayDirection = raycaster.ray.direction.clone();
-      const rayOrigin = raycaster.ray.origin.clone();
-      const farPoint = rayOrigin.clone().add(rayDirection.multiplyScalar(10000)); // 10kmに拡張
-      
-      // キャラクター位置から遠い点への方向を計算
-      const characterPosition = shooterTransform.position.clone();
-      characterPosition.y += 1.5; // 胸の高さ
-      
-      direction = farPoint.clone().sub(characterPosition).normalize();
-    } else {
-      // フォールバック: カメラの向きを使用
-      const cameraRotation = renderSys?.getCameraRotation() || { x: 0, y: 0 };
-      direction.applyAxisAngle(new THREE.Vector3(0, 1, 0), cameraRotation.y);
-      direction.applyAxisAngle(new THREE.Vector3(1, 0, 0), cameraRotation.x);
-    }
+    // 渡された方向をそのまま使用（ShootingSystemで既に計算済み）
+    const normalizedDirection = direction.clone().normalize();
     
     // 弾速を設定
     const speed = this.getProjectileSpeed(triggerType);
-    const velocity = direction.multiplyScalar(speed);
+    const velocity = normalizedDirection.multiplyScalar(speed);
     
     // 弾丸の種類を決定
     const projectileType = this.getProjectileType(triggerType);
@@ -101,35 +76,21 @@ export class ProjectileManager {
       projectileType,
       triggerType,
       velocity,
-      definition.damage * (character.stats.attackPower / 100),
+      definition.damage,
       definition.range,
       shooter.id,
       character.team
     );
     projectileEntity.addComponent(Projectile, projectile);
     
-    // 弾の発射位置をキャラクターの中心から計算
-    const position = shooterTransform.position.clone();
-    
-    // キャラクターの中心から発射（手のオフセットは一時的に無効）
-    position.y += 1.5; // 胸の高さから発射
-    
-    // 射撃方向に少し前方にオフセット（キャラクターの体から弾が出るように）
-    position.add(direction.clone().multiplyScalar(0.5));
-    
-    // 弾の回転を射撃方向に合わせる
+    // 弾の回転を射撃方向に合わせる（CylinderGeometry用）
+    const quaternion = new THREE.Quaternion();
+    quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), normalizedDirection);
     const rotation = new THREE.Euler();
-    if (camera) {
-      // 射撃方向から回転を計算
-      const lookDirection = direction.clone();
-      rotation.setFromVector3(lookDirection);
-    } else {
-      const cameraRotation = renderSys?.getCameraRotation() || { x: 0, y: 0 };
-      rotation.set(cameraRotation.x, cameraRotation.y, 0);
-    }
+    rotation.setFromQuaternion(quaternion);
     
     projectileEntity.addComponent(Transform, new Transform(
-      position,
+      position.clone(),
       rotation,
       new THREE.Vector3(1, 1, 1)
     ));
@@ -157,9 +118,6 @@ export class ProjectileManager {
    * 発射物を削除
    */
   removeProjectile(projectile: Entity): void {
-    // タグをクリア
-    projectile.clearTags();
-    
     // プールに戻す（再利用のため）
     if (this.projectilePool.length < 50) {
       this.projectilePool.push(projectile);
@@ -223,7 +181,7 @@ export class ProjectileManager {
     let material: THREE.Material;
     
     switch (projectileType) {
-      case ProjectileType.NORMAL:
+      case ProjectileType.BULLET:
         geometry = new THREE.SphereGeometry(0.02, 4, 4);
         material = new THREE.MeshBasicMaterial({ color: 0x00ff88 });
         break;
@@ -242,9 +200,13 @@ export class ProjectileManager {
         });
         break;
         
-      case ProjectileType.SNIPER:
-        geometry = new THREE.CylinderGeometry(0.005, 0.005, 0.2, 6);
-        material = new THREE.MeshBasicMaterial({ color: 0xffff00 });
+      case ProjectileType.HOMING:
+        geometry = new THREE.SphereGeometry(0.03, 6, 6);
+        material = new THREE.MeshBasicMaterial({ 
+          color: 0x00ff44,
+          transparent: true,
+          opacity: 0.9 
+        });
         break;
         
       default:
@@ -256,7 +218,7 @@ export class ProjectileManager {
     const mesh = new THREE.Mesh(geometry, material);
     
     // 弾丸の向きを調整（進行方向に向ける）
-    if (projectileType === ProjectileType.PIERCING || projectileType === ProjectileType.SNIPER) {
+    if (projectileType === ProjectileType.PIERCING) {
       mesh.rotation.x = Math.PI / 2; // Z軸方向に向ける
     }
     
@@ -267,17 +229,16 @@ export class ProjectileManager {
    * 発射物の種類を取得
    */
   private getProjectileType(triggerType: TriggerType): ProjectileType {
-    const definition = TRIGGER_DEFINITIONS[triggerType];
-    
-    switch (definition.category) {
-      case 'sniper':
-        return ProjectileType.SNIPER;
-      case 'gunner':
+    switch (triggerType) {
+      case TriggerType.METEORA:
+      case TriggerType.SALAMANDER:
         return ProjectileType.EXPLOSIVE;
-      case 'shooter':
-        return ProjectileType.NORMAL;
+      case TriggerType.IBIS:
+        return ProjectileType.PIERCING;
+      case TriggerType.HOUND:
+        return ProjectileType.HOMING;
       default:
-        return ProjectileType.NORMAL;
+        return ProjectileType.BULLET;
     }
   }
 
@@ -325,7 +286,7 @@ export class ProjectileManager {
     for (const projectile of this.projectilePool) {
       this.world.removeEntity(projectile);
     }
-    this.projectilePool.clear();
+    this.projectilePool.length = 0;
     
     // アクティブな発射物も削除
     const activeProjectiles = this.world.getEntitiesWithTag('projectile');

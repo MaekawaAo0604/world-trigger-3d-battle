@@ -103,33 +103,25 @@ export class ShootingSystem extends System {
    * クロスヘアが指す位置を特定
    */
   public performCameraRaycast(camera: THREE.Camera): RaycastResult {
+    // 正確なクロスヘア位置へのレイキャスト
     const raycaster = new THREE.Raycaster();
     
-    // 画面中央（レティクル位置）からレイキャスト
+    // 画面中央（クロスヘア位置）からレイキャストを正確に設定
     raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
     
-    // レイキャスターの方向を安定化
-    const rayDirection = raycaster.ray.direction.clone().normalize();
-    
-    // カメラの実際の前方向と比較して極端な差がある場合は修正
-    const cameraForward = new THREE.Vector3(0, 0, -1);
-    cameraForward.applyQuaternion(camera.quaternion);
-    cameraForward.normalize();
-    
-    const angleDifference = rayDirection.angleTo(cameraForward);
-    if (angleDifference > Math.PI / 4) { // 45度以上の差がある場合
-      console.warn('Large angle difference detected, using camera forward:', angleDifference);
-      raycaster.ray.direction.copy(cameraForward);
-    }
+    // デバッグ：レイキャストの設定を確認
+    console.log('Crosshair raycast debug:');
+    console.log('  camera position:', camera.position.toArray());
+    console.log('  ray origin:', raycaster.ray.origin.toArray());
+    console.log('  ray direction:', raycaster.ray.direction.toArray());
     
     // レイキャスト対象を取得
     const renderSystem = this.world?.getSystem(RenderSystem);
     const scene = renderSystem?.getScene();
     
     if (!scene) {
-      // フォールバック: カメラ位置から前方の点を計算
-      const direction = cameraForward.clone();
-      const point = camera.position.clone().add(direction.multiplyScalar(this.maxShootingRange));
+      // フォールバック: レイキャストの方向を使用
+      const point = raycaster.ray.origin.clone().add(raycaster.ray.direction.clone().multiplyScalar(this.maxShootingRange));
       
       return {
         hit: false,
@@ -138,12 +130,13 @@ export class ShootingSystem extends System {
       };
     }
 
-    // TPS用カメラトレースの設定（カメラ近くの干渉を避けるため少し離れた場所から開始）
+    // レイキャストの範囲を設定
     raycaster.near = 0.5;  // カメラ近くの干渉を避ける
     raycaster.far = this.maxShootingRange;
     
     // シーン内のオブジェクトに対してレイキャスト実行
     const intersects = raycaster.intersectObjects(scene.children, true);
+    console.log('Raycast intersects:', intersects.length, 'objects');
     
     // 有効なヒットを探す
     let validHit: THREE.Intersection | null = null;
@@ -181,6 +174,7 @@ export class ShootingSystem extends System {
     }
     
     if (validHit) {
+      console.log('Valid hit at:', validHit.point.toArray());
       return {
         hit: true,
         point: validHit.point.clone(),
@@ -189,12 +183,9 @@ export class ShootingSystem extends System {
         normal: validHit.face?.normal.clone()
       };
     } else {
-      // ヒットしない場合は安定したカメラ前方向を使用
-      const cameraForward = new THREE.Vector3(0, 0, -1);
-      cameraForward.applyQuaternion(camera.quaternion);
-      cameraForward.normalize();
-      
-      const point = camera.position.clone().add(cameraForward.multiplyScalar(this.maxShootingRange));
+      // ヒットしない場合はレイキャストの方向を使用
+      const point = raycaster.ray.origin.clone().add(raycaster.ray.direction.clone().multiplyScalar(this.maxShootingRange));
+      console.log('No hit, using fallback point:', point.toArray());
       
       return {
         hit: false,
@@ -289,66 +280,50 @@ export class ShootingSystem extends System {
     const definition = TRIGGER_DEFINITIONS[triggerType];
     const weaponSetting = this.weaponSettings[definition.category as keyof typeof this.weaponSettings];
     
-    // TPSデュアルトレースシステム
-    // 1. カメラトレースの結果を使用して目標点を設定
-    if (!cameraResult.hit) {
-      // カメラトレースが何も当たらなかった場合は、cameraResultのpointをそのまま使用
-      // （performCameraRaycastで既に適切なフォールバック処理済み）
-      targetPoint = cameraResult.point.clone();
-    }
+    // クロスヘア指向点への正確な射撃
+    // カメラレイキャストで取得した正確な位置を使用
+    targetPoint = cameraResult.point.clone();
     
-    // 2. マズルトレースで障害物チェック
-    const muzzleResult = this.performWeaponRaycast(weaponPosition, targetPoint, triggerType);
+    // 3人称視点での視差補正
+    // 近距離では武器とカメラの位置差が影響するため調整
+    const renderSystem = this.world?.getSystem(RenderSystem);
+    const camera = renderSystem?.getCamera();
+    const cameraToWeaponOffset = weaponPosition.clone().sub(camera?.position || new THREE.Vector3());
     
-    // 3. デュアルトレースロジック
-    if (cameraResult.hit && !muzzleResult.hit) {
-      // カメラはターゲットを見ているが、マズルからは障害物なし
-      targetPoint = cameraResult.point.clone();
-    } else if (!cameraResult.hit && muzzleResult.hit) {
-      // カメラは何も当たらないが、マズルは障害物に当たる
-      targetPoint = muzzleResult.point.clone();
-      blockedByObstacle = true;
-    } else if (cameraResult.hit && muzzleResult.hit) {
-      // 両方がヒットした場合は近い方を使用
-      if (muzzleResult.distance < cameraResult.distance) {
-        targetPoint = muzzleResult.point.clone();
-        blockedByObstacle = true;
-      } else {
-        targetPoint = cameraResult.point.clone();
-      }
-    }
+    // 距離に応じた補正強度（近いほど強く補正）
+    const distance = cameraResult.distance;
+    const parallaxCorrection = Math.max(0, Math.min(1, (10 - distance) / 10));
     
-    // 最終射撃方向を計算
-    const direction = targetPoint.clone().sub(weaponPosition).normalize();
+    // Y軸方向の視差を重点的に補正（上下のずれ）
+    const correctedTarget = targetPoint.clone();
+    correctedTarget.y += cameraToWeaponOffset.y * parallaxCorrection * 0.5;
+    
+    // 武器位置から補正されたターゲット位置への方向を計算
+    const direction = correctedTarget.clone().sub(weaponPosition).normalize();
+    
+    console.log('Parallax correction:');
+    console.log('  distance:', distance);
+    console.log('  correction strength:', parallaxCorrection);
+    console.log('  camera-weapon offset:', cameraToWeaponOffset.toArray());
+    console.log('  corrected target:', correctedTarget.toArray());
     actualDistance = weaponPosition.distanceTo(targetPoint);
     
-    // 方向ベクトルの妥当性を厳密にチェック
-    if (direction.length() < 0.9 || direction.length() > 1.1 || isNaN(direction.x) || isNaN(direction.y) || isNaN(direction.z)) {
-      console.warn('Invalid direction vector detected, using camera forward:', direction);
-      // カメラの前方向を強制的に使用
-      const renderSystem = this.world?.getSystem(RenderSystem);
-      const camera = renderSystem?.getCamera();
-      if (camera) {
-        const cameraForward = new THREE.Vector3(0, 0, -1);
-        cameraForward.applyQuaternion(camera.quaternion);
-        direction.copy(cameraForward.normalize());
-      }
-    } else {
-      direction.normalize();
+    // デバッグ用ログ
+    console.log('Shooting calculation:');
+    console.log('  weaponPosition:', weaponPosition.toArray());
+    console.log('  targetPoint:', targetPoint.toArray());
+    console.log('  direction:', direction.toArray());
+    console.log('  distance:', actualDistance);
+    console.log('  cameraHit:', cameraResult.hit);
+    
+    // 方向ベクトルの基本的な妥当性チェック
+    if (isNaN(direction.x) || isNaN(direction.y) || isNaN(direction.z)) {
+      console.warn('Invalid direction vector detected, using fallback');
+      direction.set(0, 0, -1); // 前方向へのフォールバック
     }
     
-    // 武器位置とターゲット位置の距離をチェック
-    if (actualDistance < 0.1) {
-      console.warn('Target too close to weapon, using camera forward');
-      const renderSystem = this.world?.getSystem(RenderSystem);
-      const camera = renderSystem?.getCamera();
-      if (camera) {
-        const cameraForward = new THREE.Vector3(0, 0, -1);
-        cameraForward.applyQuaternion(camera.quaternion);
-        direction.copy(cameraForward.normalize());
-        actualDistance = this.maxShootingRange;
-      }
-    }
+    // 方向ベクトルを正規化
+    direction.normalize();
     
     return {
       targetPoint,
@@ -379,12 +354,23 @@ export class ShootingSystem extends System {
 
     // 武器位置を計算
     const weaponPosition = this.calculateWeaponPosition(shooterTransform, triggerType, isLeftHand);
+    console.log('Weapon position:', weaponPosition.toArray());
     
     // TPSデュアルトレースシステムのカメラトレース
     const cameraResult = this.performCameraRaycast(camera);
+    console.log('Camera raycast result:', {
+      hit: cameraResult.hit,
+      point: cameraResult.point.toArray(),
+      distance: cameraResult.distance
+    });
     
     // 弾道計算
     const calculation = this.calculateTrajectory(weaponPosition, cameraResult, triggerType, isLeftHand);
+    console.log('Final trajectory calculation:', {
+      targetPoint: calculation.targetPoint.toArray(),
+      direction: calculation.direction.toArray(),
+      canShoot: calculation.canShoot
+    });
     
     if (!calculation.canShoot) {
       console.log('Cannot shoot: trajectory blocked');
@@ -544,11 +530,17 @@ export class ShootingSystem extends System {
     const speed = this.getProjectileSpeed(triggerType, character);
     const velocity = direction.clone().multiplyScalar(speed);
     
+    // デバッグ用ログ
+    console.log('Projectile velocity calculation:');
+    console.log('  direction:', direction.toArray());
+    console.log('  speed:', speed);
+    console.log('  velocity:', velocity.toArray());
+    
     // 弾丸の種類を決定
     const projectileType = this.getProjectileType(triggerType);
     
     // ダメージ計算（アイビスの特殊効果あり）
-    let finalDamage = definition.damage * (character.stats.attackPower / 100);
+    let finalDamage = definition.damage;
     
     // アイビスの特殊効果：トリオン量によるダメージアップ
     if (triggerType === TriggerType.IBIS) {
@@ -582,8 +574,12 @@ export class ShootingSystem extends System {
     projectileEntity.addComponent(Projectile, projectile);
     
     // Transform
+    // 方向ベクトルから回転を計算
+    // CylinderGeometryの初期方向はY軸（0,1,0）なので、それを基準にする
+    const quaternion = new THREE.Quaternion();
+    quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), direction);
     const rotation = new THREE.Euler();
-    rotation.setFromVector3(direction);
+    rotation.setFromQuaternion(quaternion);
     
     projectileEntity.addComponent(Transform, new Transform(
       position.clone(),
@@ -687,9 +683,7 @@ export class ShootingSystem extends System {
         material = new THREE.MeshBasicMaterial({
           color: 0x00ff44,
           transparent: true,
-          opacity: 0.9,
-          emissive: 0x00ff44,
-          emissiveIntensity: 0.5
+          opacity: 0.9
         });
         
         // 光る軌跡エフェクトを追加
@@ -704,7 +698,7 @@ export class ShootingSystem extends System {
         const group = new THREE.Group();
         group.add(new THREE.Mesh(geometry, material));
         group.add(glowMesh);
-        return group;
+        return group as any; // Groupを返すため、型アサーションを使用
       case TriggerType.VIPER:
         // バイパー：軌道変更弾は紫色の光弾
         geometry = new THREE.SphereGeometry(0.07, 8, 8);
@@ -887,12 +881,12 @@ export class ShootingSystem extends System {
   private clearDebugObjects(scene: THREE.Scene): void {
     this.debugObjects.forEach(obj => {
       scene.remove(obj);
-      if (obj.geometry) obj.geometry.dispose();
-      if (obj.material) {
+      if ('geometry' in obj && obj.geometry) obj.geometry.dispose();
+      if ('material' in obj && obj.material) {
         if (Array.isArray(obj.material)) {
-          obj.material.forEach(mat => mat.dispose());
+          obj.material.forEach((mat: any) => mat.dispose());
         } else {
-          obj.material.dispose();
+          (obj.material as any).dispose();
         }
       }
     });
