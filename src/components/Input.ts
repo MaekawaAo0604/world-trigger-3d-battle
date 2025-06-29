@@ -11,14 +11,14 @@ export class Input {
   // ボタン入力
   public jump: boolean = false;
   public dash: boolean = false;
-  public mainRightAction: boolean = false;  // 右手メインアクション（右クリック）
-  public subRightAction: boolean = false;   // 右手サブアクション（Eキー）
-  public mainLeftAction: boolean = false;   // 左手メインアクション（左クリック）
-  public subLeftAction: boolean = false;    // 左手サブアクション（Qキー）
+  public mainRightAction: boolean = false;  // 右手メインアクション（左クリック）
+  public subRightAction: boolean = false;   // 右手サブアクション（右クリック）
+  public mainLeftAction: boolean = false;   // 左手メインアクション（Qキー）
+  public subLeftAction: boolean = false;    // 左手サブアクション（Eキー）
   public generateWeapon: boolean = false;
   public generateLeftWeapon: boolean = false;  // 左手武器生成
-  public isMainActionHeld: boolean = false;    // 右クリック長押し状態
-  public isLeftActionHeld: boolean = false;    // 左クリック長押し状態
+  public isMainActionHeld: boolean = false;    // 左クリック長押し状態
+  public isLeftActionHeld: boolean = false;    // Qキー長押し状態
   
   // トリガー切り替え
   public triggerSlot: number = -1;  // 右手: 1-4の数字キー、-1は切り替えなし

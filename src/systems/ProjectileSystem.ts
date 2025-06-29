@@ -115,6 +115,15 @@ export class ProjectileSystem extends System {
     // 追尾対象を探す
     const target = this.findNearestTarget(transform.position, projectile.team);
     
+    // デバッグ：ターゲット検出の確認
+    if (entity.id % 60 === 0) { // 1秒おきにログ
+      console.log(`Homing search for projectile ${entity.id}:`, {
+        projectilePosition: transform.position.toArray(),
+        targetFound: !!target,
+        targetId: target?.id
+      });
+    }
+    
     if (target) {
       const targetTransform = target.getComponent(Transform);
       if (targetTransform) {
@@ -124,10 +133,23 @@ export class ProjectileSystem extends System {
         // 現在の速度方向と目標方向を線形補間
         const currentDirection = velocity.linear.clone().normalize();
         
-        // ハウンドの追跡強度
+        // ハウンドの追跡強度（適度な値に調整）
         let homingStrength = projectile.homingStrength * deltaTime;
+        // 最小値を保証して、確実にホーミングが働くようにする
+        homingStrength = Math.max(homingStrength, 0.02); // 最小2%の補間率
+        homingStrength = Math.min(homingStrength, 0.1);  // 最大10%の補間率（急激な方向転換を防ぐ）
         
         const newDirection = currentDirection.lerp(targetDirection, homingStrength).normalize();
+        
+        // デバッグ：ホーミング動作を確認
+        if (entity.id % 30 === 0) { // 0.5秒おきにログ
+          console.log(`Homing projectile ${entity.id}:`, {
+            currentDirection: currentDirection.toArray(),
+            targetDirection: targetDirection.toArray(),
+            homingStrength: homingStrength,
+            newDirection: newDirection.toArray()
+          });
+        }
         
         // 新しい速度を設定（速度の大きさは保持）
         const speed = velocity.linear.length();
@@ -160,12 +182,8 @@ export class ProjectileSystem extends System {
       if (character && transform && character.team !== projectileTeam) {
         const distance = position.distanceTo(transform.position);
         
-        // 視界内チェック（前方180度）
-        const toTarget = transform.position.clone().sub(position).normalize();
-        const forward = new THREE.Vector3(0, 0, -1); // 仮の前方向
-        const angle = forward.angleTo(toTarget);
-        
-        if (distance < nearestDistance && distance <= maxHomingRange && angle < Math.PI * 0.75) {
+        // 基本的な距離チェック（視界チェックは緩めにする）
+        if (distance < nearestDistance && distance <= maxHomingRange) {
           nearestDistance = distance;
           nearestTarget = entity;
         }

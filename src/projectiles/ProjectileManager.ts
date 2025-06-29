@@ -182,36 +182,58 @@ export class ProjectileManager {
     
     switch (projectileType) {
       case ProjectileType.BULLET:
-        geometry = new THREE.SphereGeometry(0.02, 4, 4);
-        material = new THREE.MeshBasicMaterial({ color: 0x00ff88 });
+        geometry = new THREE.SphereGeometry(0.08, 8, 8);
+        material = new THREE.MeshBasicMaterial({ 
+          color: 0x00ffaa,
+          transparent: true,
+          opacity: 1.0,
+          emissive: 0x00ffaa,
+          emissiveIntensity: 0.4
+        });
         break;
         
       case ProjectileType.PIERCING:
-        geometry = new THREE.ConeGeometry(0.01, 0.1, 4);
-        material = new THREE.MeshBasicMaterial({ color: 0xff0088 });
+        geometry = new THREE.ConeGeometry(0.04, 0.15, 6);
+        material = new THREE.MeshBasicMaterial({ 
+          color: 0xff44aa,
+          transparent: true,
+          opacity: 1.0,
+          emissive: 0xff44aa,
+          emissiveIntensity: 0.5
+        });
         break;
         
       case ProjectileType.EXPLOSIVE:
-        geometry = new THREE.SphereGeometry(0.05, 6, 6);
+        geometry = new THREE.SphereGeometry(0.1, 8, 8);
         material = new THREE.MeshBasicMaterial({ 
-          color: 0xff4400,
+          color: 0xff6600,
           transparent: true,
-          opacity: 0.8 
+          opacity: 1.0,
+          emissive: 0xff6600,
+          emissiveIntensity: 0.4
         });
         break;
         
       case ProjectileType.HOMING:
-        geometry = new THREE.SphereGeometry(0.03, 6, 6);
+        geometry = new THREE.SphereGeometry(0.09, 8, 8);
         material = new THREE.MeshBasicMaterial({ 
-          color: 0x00ff44,
+          color: 0x00ff66,
           transparent: true,
-          opacity: 0.9 
+          opacity: 1.0,
+          emissive: 0x00ff66,
+          emissiveIntensity: 0.4
         });
         break;
         
       default:
-        geometry = new THREE.SphereGeometry(0.02, 4, 4);
-        material = new THREE.MeshBasicMaterial({ color: 0x888888 });
+        geometry = new THREE.SphereGeometry(0.08, 8, 8);
+        material = new THREE.MeshBasicMaterial({ 
+          color: 0xaaaaaa,
+          transparent: true,
+          opacity: 1.0,
+          emissive: 0xaaaaaa,
+          emissiveIntensity: 0.3
+        });
         break;
     }
     

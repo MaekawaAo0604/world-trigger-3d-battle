@@ -302,6 +302,8 @@ export class Trigger {
     if (!this.currentTrigger) return false;
     
     const definition = TRIGGER_DEFINITIONS[this.currentTrigger];
+    console.log(`🔫 右手武器生成: ${this.currentTrigger} (カテゴリ: ${definition.category})`);
+    
     if (definition.category !== 'attacker' && definition.category !== 'sniper' && definition.category !== 'gunner') return false;
     
     if (this.weaponGenerated) return false; // 既に生成済み
@@ -353,6 +355,8 @@ export class Trigger {
     if (!this.leftCurrentTrigger) return false;
     
     const definition = TRIGGER_DEFINITIONS[this.leftCurrentTrigger];
+    console.log(`🔫 左手武器生成: ${this.leftCurrentTrigger} (カテゴリ: ${definition.category})`);
+    
     // 左手でも様々なカテゴリのトリガーを生成可能
     if (definition.category !== 'attacker' && 
         definition.category !== 'sniper' && 

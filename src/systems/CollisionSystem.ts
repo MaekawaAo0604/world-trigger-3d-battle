@@ -96,7 +96,15 @@ export class CollisionSystem extends System {
     const colliderA = entityA.getComponent(Collider)!;
     const colliderB = entityB.getComponent(Collider)!;
 
-    // 簡易的な球体同士の衝突判定
+    // 扇形攻撃の特別な判定
+    if ((entityA as any).fanAttackInfo) {
+      return this.checkFanAttackCollision(entityA, entityB);
+    }
+    if ((entityB as any).fanAttackInfo) {
+      return this.checkFanAttackCollision(entityB, entityA);
+    }
+
+    // 通常の球体同士の衝突判定
     const distance = transformA.position.distanceTo(transformB.position);
     const radiusSum = this.getColliderRadius(colliderA, transformA) + 
                      this.getColliderRadius(colliderB, transformB);
@@ -118,6 +126,116 @@ export class CollisionSystem extends System {
       };
     }
 
+    return null;
+  }
+
+  /**
+   * 扇形攻撃の衝突判定（5度セグメント単位）
+   */
+  private checkFanAttackCollision(attackEntity: Entity, targetEntity: Entity): CollisionInfo | null {
+    const attackTransform = attackEntity.getComponent(Transform)!;
+    const targetTransform = targetEntity.getComponent(Transform)!;
+    const fanInfo = (attackEntity as any).fanAttackInfo;
+
+    if (!fanInfo) return null;
+
+    // 攻撃者の位置（基準点）
+    const attackerPos = attackTransform.position.clone();
+    const targetPos = targetTransform.position.clone();
+    
+    // 攻撃者からターゲットへのベクトル
+    const toTarget = targetPos.clone().sub(attackerPos);
+    const distance = toTarget.length();
+    
+    // 射程チェック
+    if (distance > fanInfo.range * 0.8) { // エフェクトの有効範囲
+      return null;
+    }
+    
+    // Y軸の高さチェック（上下方向の許容範囲）
+    if (Math.abs(toTarget.y) > 2.0) { // 2m以上の高低差は対象外
+      return null;
+    }
+    
+    // XZ平面での角度計算（Y軸回転を考慮）
+    const targetAngleXZ = Math.atan2(toTarget.x, -toTarget.z); // -Z軸が前方向
+    const attackerRotationY = attackTransform.rotation.y;
+    
+    // 攻撃者の向きに対する相対角度
+    let relativeAngle = targetAngleXZ - attackerRotationY;
+    
+    // 角度を -π から π の範囲に正規化
+    while (relativeAngle > Math.PI) relativeAngle -= 2 * Math.PI;
+    while (relativeAngle < -Math.PI) relativeAngle += 2 * Math.PI;
+    
+    // 現在表示されている5度セグメントのうち、どれかに当たっているかチェック
+    const currentTime = Date.now();
+    const animationStartTime = (attackEntity as any).animationStartTime || currentTime;
+    const timeSinceStart = currentTime - animationStartTime;
+    
+    // 現在アクティブなセグメントを直接メッシュのフラグで確認（残影除外）
+    const meshComponent = attackEntity.getComponent(MeshComponent);
+    if (!meshComponent || !meshComponent.mesh) return null;
+    
+    const attackMesh = meshComponent.mesh as THREE.Group;
+    let activeSegmentIndex = -1;
+    let activeSegmentMesh: THREE.Mesh | null = null;
+    
+    // 全セグメントをチェックして、isActiveフラグがtrueのものを探す
+    for (let i = 0; i < attackMesh.children.length; i++) {
+      const segment = attackMesh.children[i] as THREE.Mesh;
+      if (segment.visible && (segment as any).isActive === true) {
+        activeSegmentIndex = i;
+        activeSegmentMesh = segment;
+        break; // 最初のアクティブセグメントのみ使用
+      }
+    }
+    
+    // アクティブなセグメントが見つからない場合は判定なし
+    if (activeSegmentIndex === -1 || !activeSegmentMesh) {
+      return null;
+    }
+    
+    const i = activeSegmentIndex;
+    // 各セグメントの角度範囲を計算
+    const segmentStartAngle = fanInfo.startAngle + (i * fanInfo.visualSegmentAngle) - attackerRotationY;
+    const segmentEndAngle = segmentStartAngle + fanInfo.visualSegmentAngle;
+    
+    // セグメント角度も正規化
+    let normalizedSegmentStart = segmentStartAngle;
+    let normalizedSegmentEnd = segmentEndAngle;
+    
+    while (normalizedSegmentStart > Math.PI) normalizedSegmentStart -= 2 * Math.PI;
+    while (normalizedSegmentStart < -Math.PI) normalizedSegmentStart += 2 * Math.PI;
+    while (normalizedSegmentEnd > Math.PI) normalizedSegmentEnd -= 2 * Math.PI;
+    while (normalizedSegmentEnd < -Math.PI) normalizedSegmentEnd += 2 * Math.PI;
+    
+    // ターゲットがこの1度セグメント内にいるかチェック
+    let isInSegment = false;
+    if (normalizedSegmentStart <= normalizedSegmentEnd) {
+      // 通常のケース
+      isInSegment = relativeAngle >= normalizedSegmentStart && relativeAngle <= normalizedSegmentEnd;
+    } else {
+      // -π/π境界をまたぐケース
+      isInSegment = relativeAngle >= normalizedSegmentStart || relativeAngle <= normalizedSegmentEnd;
+    }
+    
+    if (isInSegment) {
+      // 衝突点を計算
+      const hitPoint = targetPos.clone();
+      const normal = toTarget.clone().normalize();
+      
+      console.log(`🗡️ 扇形攻撃ヒット! アクティブセグメント${i}/120, 距離=${distance.toFixed(2)}, 角度=${(relativeAngle * 180 / Math.PI).toFixed(1)}度, セグメント範囲=${(normalizedSegmentStart * 180 / Math.PI).toFixed(1)}-${(normalizedSegmentEnd * 180 / Math.PI).toFixed(1)}度`);
+      
+      return {
+        entityA: attackEntity,
+        entityB: targetEntity,
+        point: hitPoint,
+        normal: normal,
+        distance: distance
+      };
+    }
+    
     return null;
   }
 

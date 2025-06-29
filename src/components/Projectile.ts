@@ -56,9 +56,9 @@ export class Projectile {
       case ProjectileType.HOMING:
         // ハウンドの追跡強度をトリガータイプで調整
         if (triggerType === TriggerType.HOUND) {
-          this.homingStrength = 8; // ハウンドは強い追跡力
+          this.homingStrength = 2.5; // 適度なホーミング（確実に当たりすぎないよう調整）
         } else {
-          this.homingStrength = 5; // その他の追跡弾
+          this.homingStrength = 1.5; // その他の追跡弾
         }
         break;
       case ProjectileType.PIERCING:

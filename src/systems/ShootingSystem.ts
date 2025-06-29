@@ -637,9 +637,9 @@ export class ShootingSystem extends System {
       console.log(`Lightning speed boost: ${speedMultiplier.toFixed(2)}x (Trion: ${character.stats.currentTrion}/${character.stats.trionCapacity})`);
     }
     
-    // ハウンドの弾速調整（追跡しやすいように少し遅め）
+    // ハウンドの弾速調整（ホーミング効果を活かすため中程度の速度）
     if (triggerType === TriggerType.HOUND) {
-      baseSpeed = 25; // 追跡性能を活かすため遅めの弾速
+      baseSpeed = 30; // ホーミングが効果的に働く速度
     }
     
     return baseSpeed;
@@ -678,20 +678,24 @@ export class ShootingSystem extends System {
     // 特定のトリガータイプに対する特別な視覚効果
     switch (triggerType) {
       case TriggerType.HOUND:
-        // ハウンド：追尾弾は緑色の光弾（少し大きめ）
-        geometry = new THREE.SphereGeometry(0.1, 8, 8);
+        // ハウンド：追尾弾は明るい緑色の蛍光弾（少し大きめ）
+        geometry = new THREE.SphereGeometry(0.12, 8, 8);
         material = new THREE.MeshBasicMaterial({
-          color: 0x00ff44,
+          color: 0x00ff55,
           transparent: true,
-          opacity: 0.9
+          opacity: 1.0,
+          emissive: 0x00ff55,
+          emissiveIntensity: 0.3
         });
         
-        // 光る軌跡エフェクトを追加
-        const glowGeometry = new THREE.SphereGeometry(0.15, 6, 6);
+        // 光る軌跡エフェクトを追加（より明るく）
+        const glowGeometry = new THREE.SphereGeometry(0.18, 6, 6);
         const glowMaterial = new THREE.MeshBasicMaterial({
-          color: 0x00ff44,
+          color: 0x00ff55,
           transparent: true,
-          opacity: 0.3
+          opacity: 0.4,
+          emissive: 0x00ff55,
+          emissiveIntensity: 0.2
         });
         const glowMesh = new THREE.Mesh(glowGeometry, glowMaterial);
         
@@ -700,21 +704,25 @@ export class ShootingSystem extends System {
         group.add(glowMesh);
         return group as any; // Groupを返すため、型アサーションを使用
       case TriggerType.VIPER:
-        // バイパー：軌道変更弾は紫色の光弾
-        geometry = new THREE.SphereGeometry(0.07, 8, 8);
+        // バイパー：軌道変更弾は明るい紫色の蛍光弾
+        geometry = new THREE.SphereGeometry(0.09, 8, 8);
         material = new THREE.MeshBasicMaterial({
-          color: 0x8800ff,
+          color: 0xaa00ff,
           transparent: true,
-          opacity: 0.9
+          opacity: 1.0,
+          emissive: 0xaa00ff,
+          emissiveIntensity: 0.4
         });
         break;
       case TriggerType.SALAMANDER:
-        // サラマンダー：爆発弾は赤い光弾
-        geometry = new THREE.SphereGeometry(0.09, 8, 8);
+        // サラマンダー：爆発弾は明るい赤色の蛍光弾
+        geometry = new THREE.SphereGeometry(0.11, 8, 8);
         material = new THREE.MeshBasicMaterial({
-          color: 0xff2200,
+          color: 0xff3300,
           transparent: true,
-          opacity: 0.9
+          opacity: 1.0,
+          emissive: 0xff3300,
+          emissiveIntensity: 0.4
         });
         break;
       // Spiderは補助トリガーなのでメッシュ作成は不要
@@ -722,33 +730,47 @@ export class ShootingSystem extends System {
         // カテゴリ別のデフォルト設定
         switch (definition.category) {
           case 'sniper':
-            // スナイパー弾は長い円柱
-            geometry = new THREE.CylinderGeometry(0.05, 0.05, 0.3, 8);
+            // スナイパー弾は明るい赤色の蛍光円柱
+            geometry = new THREE.CylinderGeometry(0.06, 0.06, 0.35, 8);
             material = new THREE.MeshBasicMaterial({
-              color: 0xff4444
+              color: 0xff6644,
+              transparent: true,
+              opacity: 1.0,
+              emissive: 0xff6644,
+              emissiveIntensity: 0.5
             });
             break;
           case 'shooter':
-            // 爆発弾は大きめの球
-            geometry = new THREE.SphereGeometry(0.1, 8, 8);
+            // シューター弾は明るい黄色の蛍光弾
+            geometry = new THREE.SphereGeometry(0.12, 8, 8);
             material = new THREE.MeshBasicMaterial({
-              color: 0xffff00
+              color: 0xffff44,
+              transparent: true,
+              opacity: 1.0,
+              emissive: 0xffff44,
+              emissiveIntensity: 0.4
             });
             break;
           case 'gunner':
-            // ガンナー弾は小さくて速い
-            geometry = new THREE.SphereGeometry(0.06, 6, 6);
+            // ガンナー弾は明るい青色の蛍光弾
+            geometry = new THREE.SphereGeometry(0.08, 6, 6);
             material = new THREE.MeshBasicMaterial({
-              color: 0x00aaff,
+              color: 0x00bbff,
               transparent: true,
-              opacity: 0.9
+              opacity: 1.0,
+              emissive: 0x00bbff,
+              emissiveIntensity: 0.4
             });
             break;
           default:
-            // 通常弾は小さい球
-            geometry = new THREE.SphereGeometry(0.08, 8, 8);
+            // 通常弾は明るいシアン色の蛍光弾
+            geometry = new THREE.SphereGeometry(0.1, 8, 8);
             material = new THREE.MeshBasicMaterial({
-              color: 0x00ffff
+              color: 0x00ffff,
+              transparent: true,
+              opacity: 1.0,
+              emissive: 0x00ffff,
+              emissiveIntensity: 0.4
             });
             break;
         }

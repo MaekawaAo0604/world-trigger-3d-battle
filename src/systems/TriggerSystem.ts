@@ -189,9 +189,10 @@ export class TriggerSystem extends System {
           }
         }
 
-        // 右手サブアクション（Eキー）
+        // 右手サブアクション（右クリック）
         if (input.subRightAction && trigger.currentTrigger) {
           const definition = TRIGGER_DEFINITIONS[trigger.currentTrigger];
+          console.log(`🎮 右手サブアクション発動: ${trigger.currentTrigger} (カテゴリ: ${definition.category})`);
           if (definition.category === 'attacker') {
             // アタッカー系のサブアクション：SwordActionSystemで処理（刀身伸長、シールドモード等）
             const swordActionSystem = this.world?.getSystem(SwordActionSystem);
@@ -218,7 +219,7 @@ export class TriggerSystem extends System {
           }
         }
 
-        // 左手メインアクション（左クリック）
+        // 左手メインアクション（Qキー）
         if (input.mainLeftAction) {
           if (trigger.leftCurrentTrigger) {
             const leftDefinition = TRIGGER_DEFINITIONS[trigger.leftCurrentTrigger];
@@ -232,9 +233,10 @@ export class TriggerSystem extends System {
           }
         }
 
-        // 左手サブアクション（Qキー）
+        // 左手サブアクション（Eキー）
         if (input.subLeftAction && trigger.leftCurrentTrigger) {
           const leftDefinition = TRIGGER_DEFINITIONS[trigger.leftCurrentTrigger];
+          console.log(`🎮 左手サブアクション発動: ${trigger.leftCurrentTrigger} (カテゴリ: ${leftDefinition.category})`);
           if (leftDefinition.category === 'attacker') {
             this.useLeftWeaponAttack(entity, trigger, character, transform, 'vertical');
           } else if (leftDefinition.category === 'sniper') {
@@ -402,7 +404,13 @@ export class TriggerSystem extends System {
   private splitTriggerCubes(entity: Entity, isLeftHand: boolean): void {
     const splittingTrigger = this.splittingTriggers.get(entity.id);
     if (!splittingTrigger || !splittingTrigger.canSplit()) {
-      console.log('Cannot split: trigger not found or max split reached');
+      console.log('Cannot split: trigger not found, not generated, or max split reached');
+      return;
+    }
+    
+    // キューブが実際に生成されているか再度確認
+    if (!splittingTrigger.isGenerated) {
+      console.log('Cannot split: cubes not generated yet. Press R to generate cubes first.');
       return;
     }
 

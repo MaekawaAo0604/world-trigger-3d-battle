@@ -66,6 +66,7 @@ export class SplittingTrigger {
    * 分割可能かどうか
    */
   canSplit(): boolean {
-    return this.currentSplitLevel < this.maxSplitLevel;
+    // キューブが生成されていて、かつ最大分割レベルに達していない場合のみ分割可能
+    return this.isGenerated && this.currentSplitLevel < this.maxSplitLevel;
   }
 }
